@@ -1,0 +1,333 @@
+{
+  "job": {
+    "title": "IND - Operability Engineer",
+    "location": "India",
+    "status": "Open",
+    "department": "Operability"
+  },
+  "stages": [
+    "Application Review",
+    "Screening",
+    "Take Home Test",
+    "Technical Skills Interview",
+    "Consulting Skills Interview",
+    "Offer",
+    "Hired"
+  ],
+  "candidates": [
+    {
+      "id": "cand-7f3a1c",
+      "name": "Avery Bennett",
+      "current_title": "Site Reliability Engineer",
+      "current_company": "Northwind Systems",
+      "email": "avery.bennett4821@example-demo.com",
+      "phone": "+1 555-241-8830",
+      "applied_date": "2026-09-08",
+      "years_experience": 4.5,
+      "status": "rejected",
+      "current_stage": "Application Review",
+      "note": "Auto-rejected: 4.5 years of experience, below the 7.5 year minimum for this role",
+      "stage_history": [
+        { "stage": "Application Review", "date": "2026-09-08", "detail": { "type": "status", "message": "Auto-rejected: 4.5 years of experience, below the 7.5 year minimum for this role" } }
+      ]
+    },
+    {
+      "id": "cand-2b9e44",
+      "name": "Jordan Carter",
+      "current_title": "DevOps Consultant",
+      "current_company": "Kestrel Cloud",
+      "email": "jordan.carter1190@example-demo.com",
+      "phone": "+1 555-308-2214",
+      "applied_date": "2026-09-08",
+      "years_experience": 9,
+      "status": "active",
+      "current_stage": "Application Review",
+      "note": "Awaiting recruiter review",
+      "stage_history": [
+        { "stage": "Application Review", "date": "2026-09-08", "detail": null }
+      ]
+    },
+    {
+      "id": "cand-4d81aa",
+      "name": "Priya Nataraj",
+      "current_title": "Cloud Operations Engineer",
+      "current_company": "Solvex Systems",
+      "email": "priya.nataraj2231@example-demo.com",
+      "phone": "+1 555-118-7743",
+      "applied_date": "2026-09-09",
+      "years_experience": 8,
+      "status": "active",
+      "current_stage": "Application Review",
+      "note": "Assessment complete - awaiting recruiter review",
+      "stage_history": [
+        {
+          "stage": "Application Review",
+          "date": "2026-09-09",
+          "detail": {
+            "type": "ai_report",
+            "overall_recommendation": "Strong yes",
+            "overall_score": 4.3,
+            "notes": "",
+            "competencies": [
+              {
+                "name": "Automation",
+                "type": "technical",
+                "score": 4.5,
+                "level": "Advanced",
+                "summary": "Describes a mature CI/CD pipeline with strong ownership of rollback safety.",
+                "positives": ["Built blue-green deploys from scratch", "Owns rollback tooling end to end"],
+                "gaps": ["Limited exposure to multi-region failover"],
+                "risk_flags": [],
+                "follow_up_questions": ["How would you handle a failed canary at 2am?"]
+              },
+              {
+                "name": "Technical Aptitude",
+                "type": "technical",
+                "score": 4.0,
+                "level": "Proficient",
+                "summary": "Solid systems fundamentals, reasons well under pressure.",
+                "positives": ["Clear mental model of the request path"],
+                "gaps": ["Slightly vague on capacity planning math"],
+                "risk_flags": [],
+                "follow_up_questions": []
+              },
+              {
+                "name": "Consulting Question",
+                "type": "consulting",
+                "score": 4.5,
+                "level": "Advanced",
+                "summary": "Structured, client-first framing of the tradeoffs.",
+                "positives": ["Led with business impact before technical detail"],
+                "gaps": [],
+                "risk_flags": [],
+                "follow_up_questions": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cand-91cd07",
+      "name": "Riley Dawson",
+      "current_title": "Lead DevSecOps Engineer",
+      "current_company": "Fathom Insurance Group",
+      "email": "riley.dawson7702@example-demo.com",
+      "phone": "+1 555-475-6693",
+      "applied_date": "2026-09-05",
+      "years_experience": 11,
+      "status": "active",
+      "current_stage": "Screening",
+      "note": "Recruiter screen scheduled",
+      "stage_history": [
+        {
+          "stage": "Application Review",
+          "date": "2026-09-05",
+          "detail": {
+            "type": "ai_report",
+            "overall_recommendation": "Strong yes",
+            "overall_score": 4.4,
+            "notes": "",
+            "competencies": [
+              {
+                "name": "Automation",
+                "type": "technical",
+                "score": 4.5,
+                "level": "Advanced",
+                "summary": "Strong automation-first instincts across the stack.",
+                "positives": ["Automated a manual release process end to end"],
+                "gaps": [],
+                "risk_flags": [],
+                "follow_up_questions": []
+              },
+              {
+                "name": "Technical Aptitude",
+                "type": "technical",
+                "score": 4.5,
+                "level": "Advanced",
+                "summary": "Deep, precise answers under follow-up pressure.",
+                "positives": ["Correctly reasoned about a tricky race condition"],
+                "gaps": [],
+                "risk_flags": [],
+                "follow_up_questions": []
+              },
+              {
+                "name": "Consulting Question",
+                "type": "consulting",
+                "score": 4.0,
+                "level": "Proficient",
+                "summary": "Good structure, slightly light on stakeholder framing.",
+                "positives": ["Clear tradeoff articulation"],
+                "gaps": ["Didn't address non-technical stakeholders explicitly"],
+                "risk_flags": [],
+                "follow_up_questions": []
+              }
+            ]
+          }
+        },
+        { "stage": "Screening", "date": "2026-09-07", "detail": null }
+      ]
+    },
+    {
+      "id": "cand-5a10e2",
+      "name": "Casey Ellison",
+      "current_title": "Senior DevOps Engineer",
+      "current_company": "Bramwell Retail Corp",
+      "email": "casey.ellison3345@example-demo.com",
+      "phone": "+1 555-612-0087",
+      "applied_date": "2026-09-03",
+      "years_experience": 8,
+      "status": "active",
+      "current_stage": "Take Home Test",
+      "note": "Take-home assignment sent",
+      "stage_history": [
+        {
+          "stage": "Application Review",
+          "date": "2026-09-03",
+          "detail": {
+            "type": "ai_report",
+            "overall_recommendation": "Strong yes",
+            "overall_score": 4.7,
+            "notes": "",
+            "competencies": [
+              {
+                "name": "Automation",
+                "type": "technical",
+                "score": 5.0,
+                "level": "Expert",
+                "summary": "Exceptional depth - clearly has built and run this at scale.",
+                "positives": ["Designed a self-healing deploy system used company-wide"],
+                "gaps": [],
+                "risk_flags": [],
+                "follow_up_questions": []
+              },
+              {
+                "name": "Continuous Delivery",
+                "type": "technical",
+                "score": 4.5,
+                "level": "Advanced",
+                "summary": "Strong grasp of progressive delivery patterns.",
+                "positives": ["Fluent in canary/blue-green tradeoffs"],
+                "gaps": [],
+                "risk_flags": [],
+                "follow_up_questions": []
+              },
+              {
+                "name": "Consulting Question",
+                "type": "consulting",
+                "score": 4.5,
+                "level": "Advanced",
+                "summary": "Confident, client-ready framing.",
+                "positives": ["Anticipated the follow-up objection unprompted"],
+                "gaps": [],
+                "risk_flags": [],
+                "follow_up_questions": []
+              }
+            ]
+          }
+        },
+        {
+          "stage": "Screening",
+          "date": "2026-09-04",
+          "detail": {
+            "type": "recruiter_review",
+            "decision": "advance",
+            "recruiter_notes": "Excellent screen - confident, articulate, clearly senior. Fast-track.",
+            "recruiter_score": 4.8
+          }
+        },
+        {
+          "stage": "Take Home Test",
+          "date": "2026-09-09",
+          "detail": { "type": "status", "message": "Take-home assignment sent" }
+        }
+      ]
+    },
+    {
+      "id": "cand-c60b98",
+      "name": "Morgan Foster",
+      "current_title": "Platform Engineer",
+      "current_company": "Redgate Analytics",
+      "email": "morgan.foster9021@example-demo.com",
+      "phone": "+1 555-770-4432",
+      "applied_date": "2026-09-09",
+      "years_experience": 6,
+      "status": "rejected",
+      "current_stage": "Screening",
+      "note": "Not moving forward after recruiter screen",
+      "stage_history": [
+        {
+          "stage": "Application Review",
+          "date": "2026-09-09",
+          "detail": {
+            "type": "ai_report",
+            "overall_recommendation": "No",
+            "overall_score": 2.1,
+            "notes": "",
+            "competencies": [
+              {
+                "name": "Breadth Of Knowledge",
+                "type": "technical",
+                "score": 2.0,
+                "level": "Developing",
+                "summary": "Narrow exposure - mostly one tool/vendor.",
+                "positives": [],
+                "gaps": ["Couldn't generalize beyond their one platform"],
+                "risk_flags": ["Vague when pressed on fundamentals"],
+                "follow_up_questions": ["Have you worked outside a managed platform?"]
+              },
+              {
+                "name": "Technical Aptitude",
+                "type": "technical",
+                "score": 2.5,
+                "level": "Developing",
+                "summary": "Struggled with a basic systems tradeoff question.",
+                "positives": [],
+                "gaps": ["Uncertain reasoning under follow-up"],
+                "risk_flags": [],
+                "follow_up_questions": []
+              },
+              {
+                "name": "Consulting Question",
+                "type": "consulting",
+                "score": 2.0,
+                "level": "Developing",
+                "summary": "Answer stayed purely technical, missed the business angle entirely.",
+                "positives": [],
+                "gaps": ["No stakeholder framing"],
+                "risk_flags": [],
+                "follow_up_questions": []
+              }
+            ]
+          }
+        },
+        {
+          "stage": "Screening",
+          "date": "2026-09-10",
+          "detail": {
+            "type": "recruiter_review",
+            "decision": "reject",
+            "recruiter_notes": "Confirmed the AI read on the call - not a fit for the seniority we need.",
+            "recruiter_score": 2.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "cand-3ef7a5",
+      "name": "Taylor Grayson",
+      "current_title": "Cloud Infrastructure Engineer",
+      "current_company": "Ashworth Digital",
+      "email": "taylor.grayson5567@example-demo.com",
+      "phone": "+1 555-905-1128",
+      "applied_date": "2026-09-11",
+      "years_experience": 5.2,
+      "status": "active",
+      "current_stage": "Application Review",
+      "note": "Awaiting recruiter review",
+      "stage_history": [
+        { "stage": "Application Review", "date": "2026-09-11", "detail": null }
+      ]
+    }
+  ]
+}
