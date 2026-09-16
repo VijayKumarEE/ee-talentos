@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request, Body
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.schemas import CandidateApply
@@ -210,3 +210,36 @@ def delete_candidate(candidate_id: str, _recruiter: dict = Depends(get_current_r
         del ASSESSMENTS[candidate_id]
 
     return {"message": "Candidate deleted", "candidate_id": candidate_id}
+
+
+@router.post("/{candidate_id}/availability")
+def submit_availability(
+    candidate_id: str,
+    slots: list[str] = Body(default=[]),
+    notes: str = Body(default=""),
+):
+    """Candidate states their own availability right after finishing
+    the assessment - not picking from a recruiter's pre-set slots
+    (that's the separate, existing SchedulingPage/booking flow, still
+    intact and untouched). This is the other direction: the candidate
+    tells the recruiter when THEY'RE free, in their own words/picks, so
+    the recruiter can see it on the Shortlist page and confirm a real
+    time directly (see /scheduling/{candidate_id}/confirm-interview),
+    without an email back-and-forth to find a slot.
+
+    `slots` are simple human-readable strings the frontend builds from
+    a lightweight day/time-window picker (e.g. "Thu 18 Sep, Morning
+    (10am-12pm)") - deliberately not a rigid structured format, since
+    candidates also need `notes` for anything ad hoc that doesn't fit
+    a preset window (e.g. "any day after 6pm IST")."""
+    if candidate_id not in CANDIDATES:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    candidate = CANDIDATES[candidate_id]
+    candidate["candidate_availability"] = {
+        "slots": slots,
+        "notes": notes.strip(),
+    }
+    CANDIDATES[candidate_id] = candidate
+
+    return {"message": "Availability saved", "candidate_id": candidate_id}

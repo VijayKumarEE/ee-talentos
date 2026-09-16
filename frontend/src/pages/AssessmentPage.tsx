@@ -5,6 +5,7 @@ import {
   saveAssessmentProgress,
   getAssessmentProgress,
   uploadRecording,
+  submitAvailability,
 } from "../api/client";
 
 type Props = {
@@ -68,6 +69,19 @@ export default function AssessmentPage({ candidateId }: Props) {
   const [recordings, setRecordings] = useState<Record<string, Recording>>({});
 
   const [result, setResult] = useState<AssessmentResponse | null>(null);
+
+  // Candidate-stated availability, offered right after the assessment
+  // is submitted (see the "Thank you" screen below). Deliberately the
+  // OTHER direction from SchedulingPage.tsx's existing fixed-slot
+  // booking flow (that one offers the recruiter/panel's pre-set slots
+  // for the candidate to pick from - untouched, still works exactly
+  // as before). Here the candidate tells the recruiter when THEY'RE
+  // free, in their own words/picks, for the recruiter to read on the
+  // Shortlist page and confirm a real time directly.
+  const [selectedAvailabilitySlots, setSelectedAvailabilitySlots] = useState<string[]>([]);
+  const [availabilityNotes, setAvailabilityNotes] = useState("");
+  const [availabilitySubmitted, setAvailabilitySubmitted] = useState(false);
+  const [savingAvailability, setSavingAvailability] = useState(false);
 
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
@@ -137,6 +151,22 @@ export default function AssessmentPage({ candidateId }: Props) {
   const [focusLossCount, setFocusLossCount] = useState(0);
   const focusLossCountRef = useRef(0);
 
+  // Proctoring: how long THIS question has been on screen without the
+  // candidate starting to record. This catches a gap none of the
+  // during-recording checks above can see - reading the question,
+  // looking the answer up elsewhere, then coming back and reading it
+  // out loud while recording (which looks completely clean to
+  // tab-switch/fullscreen/focus-loss detection, since none of that
+  // happens WHILE recording). A gentle nudge after a while, not a
+  // block - a long pause can just as easily mean someone thinking
+  // carefully, so this is a signal for the recruiter to weigh, same
+  // spirit as the other three counters.
+  const NUDGE_AFTER_SECONDS = 15;
+  const [showRecordNudge, setShowRecordNudge] = useState(false);
+  const questionShownAtRef = useRef<number>(Date.now());
+  const nudgeTimeoutRef = useRef<number | null>(null);
+  const preRecordingSecondsRef = useRef<Record<string, number>>({});
+
   useEffect(() => {
     async function loadQuestionsAndProgress() {
       try {
@@ -205,6 +235,31 @@ export default function AssessmentPage({ candidateId }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restart the pre-recording nudge timer every time a new question
+  // comes into view (currentIndex changes). Cleared/rescheduled here
+  // rather than inside startRecording alone, since navigating "Back"
+  // to re-view a question should also reset the clock for it.
+  useEffect(() => {
+    questionShownAtRef.current = Date.now();
+    setShowRecordNudge(false);
+
+    if (nudgeTimeoutRef.current) window.clearTimeout(nudgeTimeoutRef.current);
+
+    const questionId = questions[currentIndex]?.question_id;
+    const alreadyAnswered = questionId ? !!recordings[questionId] : false;
+
+    if (!alreadyAnswered) {
+      nudgeTimeoutRef.current = window.setTimeout(() => {
+        setShowRecordNudge(true);
+      }, NUDGE_AFTER_SECONDS * 1000);
+    }
+
+    return () => {
+      if (nudgeTimeoutRef.current) window.clearTimeout(nudgeTimeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, questions.length]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -320,6 +375,16 @@ export default function AssessmentPage({ candidateId }: Props) {
   const startRecording = async (mode: ResponseMode) => {
     if (!currentQuestion) return;
     setRecordingError("");
+
+    // Nudge no longer applies once recording actually starts, and this
+    // is exactly the moment to capture how long the question sat on
+    // screen first - see the pre-recording-nudge useEffect above for
+    // why this signal exists.
+    setShowRecordNudge(false);
+    if (nudgeTimeoutRef.current) window.clearTimeout(nudgeTimeoutRef.current);
+    preRecordingSecondsRef.current[currentQuestion.question_id] = Math.round(
+      (Date.now() - questionShownAtRef.current) / 1000
+    );
 
     // Enter fullscreen first, before requesting media - this needs to
     // happen as close to the click as possible since browsers require
@@ -462,6 +527,7 @@ export default function AssessmentPage({ candidateId }: Props) {
           tab_switch_count: tabSwitchCountRef.current,
           fullscreen_exit_count: fullscreenExitCountRef.current,
           focus_loss_count: focusLossCountRef.current,
+          pre_recording_seconds: preRecordingSecondsRef.current[currentQuestion.question_id] || 0,
         });
 
         if (currentRecording.blob) {
@@ -535,6 +601,59 @@ export default function AssessmentPage({ candidateId }: Props) {
     if (currentIndex > 0) setCurrentIndex((i) => i - 1);
   };
 
+  // Next 3 weekdays (skips Sat/Sun) x 2 time windows = up to 6 quick
+  // picks. Computed client-side, in the candidate's own browser
+  // timezone - deliberately simple (no timezone-conversion math)
+  // since the recruiter and candidate confirm the actual time by
+  // reading it back to each other in confirm-interview, not by this
+  // list alone.
+  const buildAvailabilityOptions = (): string[] => {
+    const options: string[] = [];
+    const windows = ["Morning (10am-12pm)", "Afternoon (2pm-4pm)"];
+    const cursor = new Date();
+    let daysAdded = 0;
+
+    while (daysAdded < 3) {
+      cursor.setDate(cursor.getDate() + 1);
+      const day = cursor.getDay(); // 0 = Sun, 6 = Sat
+      if (day === 0 || day === 6) continue;
+
+      const dateLabel = cursor.toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      });
+      windows.forEach((w) => options.push(`${dateLabel}, ${w}`));
+      daysAdded += 1;
+    }
+
+    return options;
+  };
+
+  const availabilityOptions = buildAvailabilityOptions();
+
+  const toggleAvailabilitySlot = (slot: string) => {
+    setSelectedAvailabilitySlots((prev) =>
+      prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]
+    );
+  };
+
+  const handleSubmitAvailability = async () => {
+    setSavingAvailability(true);
+    try {
+      await submitAvailability(candidateId, {
+        slots: selectedAvailabilitySlots,
+        notes: availabilityNotes.trim(),
+      });
+      setAvailabilitySubmitted(true);
+    } catch (err) {
+      console.error("Failed to save availability:", err);
+      setMessage("Could not save your availability - your assessment is still submitted either way.");
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
+
   if (!candidateId) {
     return (
       <div className="ee-page">
@@ -568,6 +687,72 @@ export default function AssessmentPage({ candidateId }: Props) {
             good fit for the role.
           </p>
         </div>
+
+        {!availabilitySubmitted ? (
+          <div className="ee-card" style={{ marginTop: 20, textAlign: "left" }}>
+            <h3 style={{ marginBottom: 8 }}>If you're shortlisted, when works for a quick call?</h3>
+            <p className="ee-muted" style={{ marginBottom: 16 }}>
+              Optional, but it helps your recruiter schedule faster - pick any that work, or just
+              tell us in your own words below.
+            </p>
+
+            <div className="ee-row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {availabilityOptions.map((slot) => (
+                <label
+                  key={slot}
+                  className={`ee-badge ${selectedAvailabilitySlots.includes(slot) ? "ee-badge--brand" : "ee-badge--neutral"}`}
+                  style={{ cursor: "pointer" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedAvailabilitySlots.includes(slot)}
+                    onChange={() => toggleAvailabilitySlot(slot)}
+                    style={{ marginRight: 6 }}
+                  />
+                  {slot}
+                </label>
+              ))}
+            </div>
+
+            <label className="ee-label" htmlFor="availability-notes">
+              Or type your own (e.g. "any day after 6pm IST", "9-12 most mornings")
+            </label>
+            <textarea
+              id="availability-notes"
+              className="ee-textarea"
+              style={{ width: "100%", minHeight: 70, marginTop: 6 }}
+              value={availabilityNotes}
+              onChange={(e) => setAvailabilityNotes(e.target.value)}
+              placeholder="Type any additional availability here..."
+            />
+
+            <button
+              type="button"
+              className="ee-btn ee-btn--primary"
+              style={{ marginTop: 14 }}
+              disabled={savingAvailability || (selectedAvailabilitySlots.length === 0 && !availabilityNotes.trim())}
+              onClick={handleSubmitAvailability}
+            >
+              {savingAvailability ? "Saving..." : "Share my availability"}
+            </button>
+            <button
+              type="button"
+              className="ee-btn ee-btn--ghost"
+              style={{ marginTop: 14, marginLeft: 8 }}
+              onClick={() => setAvailabilitySubmitted(true)}
+            >
+              Skip this
+            </button>
+          </div>
+        ) : (
+          <div className="ee-card" style={{ marginTop: 20, textAlign: "center" }}>
+            <p className="ee-muted" style={{ margin: 0 }}>
+              {selectedAvailabilitySlots.length > 0 || availabilityNotes.trim()
+                ? "Thanks - your availability has been shared with the recruiting team."
+                : "No problem - your recruiter will reach out to find a time if you're shortlisted."}
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -649,7 +834,29 @@ export default function AssessmentPage({ candidateId }: Props) {
       {currentQuestion && (
         <div className="ee-card">
           <div className="ee-progress">Question {currentIndex + 1} of {questions.length}</div>
-          <h3 style={{ fontWeight: 500, lineHeight: 1.5, marginBottom: 16 }}>{currentQuestion.question}</h3>
+          <h3
+            style={{ fontWeight: 500, lineHeight: 1.5, marginBottom: 16, userSelect: "none", WebkitUserSelect: "none" }}
+            onCopy={(e) => e.preventDefault()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {currentQuestion.question}
+          </h3>
+
+          {!currentRecording && !isRecordingNow && showRecordNudge && (
+            <div className="ee-card ee-card--highlight" style={{ marginBottom: 16 }}>
+              <p style={{ margin: 0 }}>
+                <strong>Ready when you are.</strong> Would you like to record your answer now?
+              </p>
+              <button
+                type="button"
+                className="ee-btn ee-btn--ghost"
+                style={{ marginTop: 8 }}
+                onClick={() => setShowRecordNudge(false)}
+              >
+                Give me a bit longer
+              </button>
+            </div>
+          )}
 
           {!currentRecording && !isRecordingNow && (
             <div className="ee-row">

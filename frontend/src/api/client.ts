@@ -321,6 +321,7 @@ export async function saveAssessmentProgress(
     tab_switch_count?: number;
     fullscreen_exit_count?: number;
     focus_loss_count?: number;
+    pre_recording_seconds?: number;
   }
 ) {
   const res = await fetch(`${API_BASE}/assessment/progress/${candidateId}`, {
@@ -439,5 +440,33 @@ export async function getRoles() {
 export async function getRecruiters() {
   const res = await fetch(`${API_BASE}/recruiters`);
   if (!res.ok) throw new Error("Failed to load recruiters");
+  return res.json();
+}
+
+export async function submitAvailability(
+  candidateId: string,
+  payload: { slots: string[]; notes: string }
+) {
+  const res = await fetch(`${API_BASE}/candidates/${candidateId}/availability`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) throw new Error(`Failed to save availability (${res.status})`);
+  return res.json();
+}
+
+export async function confirmInterview(candidateId: string, confirmedTime: string) {
+  const res = await fetch(`${API_BASE}/scheduling/${candidateId}/confirm-interview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ confirmed_time: confirmedTime }),
+  });
+
+  if (!res.ok) {
+    handleAuthFailure(res);
+    throw new Error(`Failed to confirm interview (${res.status})`);
+  }
   return res.json();
 }

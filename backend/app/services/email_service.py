@@ -80,6 +80,29 @@ def build_booking_confirmation_email(
     )
 
 
+def build_interview_confirmed_email(
+    candidate_name: str, role: str, confirmed_time: str, zoom_link: str = ""
+) -> str:
+    """Sent when a recruiter picks a specific time out of the
+    candidate's stated availability and confirms it. This is the one
+    email in that flow - the candidate isn't asked to negotiate a slot
+    over email, only told the final confirmed time and where to join."""
+    role_phrase = f" for the {role} role" if role else ""
+    link_line = (
+        f"Join here: {zoom_link}\n\n" if zoom_link
+        else "The meeting link will follow separately.\n\n"
+    )
+    return (
+        f"Hi {candidate_name},\n\n"
+        f"Thanks for sharing your availability{role_phrase}. Your screening "
+        f"call is confirmed for:\n\n"
+        f"  {confirmed_time}\n\n"
+        f"{link_line}"
+        "See you then!\n\n"
+        "Best,\nThe Hiring Team"
+    )
+
+
 def build_rejection_email(candidate_name: str, role: str = "", reason: str = "") -> str:
     """Generic placeholder rejection template. Swap the body text here
     once real approved wording/reasons are provided - callers

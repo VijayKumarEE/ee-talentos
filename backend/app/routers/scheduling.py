@@ -12,7 +12,7 @@ Two trigger points, matching the roadmap:
 Candidates then "book" a slot from either round via /scheduling/book.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 
 from app.schemas import RecruiterReview
 from app.store import CANDIDATES
@@ -23,8 +23,10 @@ from app.services.email_service import (
     build_self_scheduling_email,
     build_booking_confirmation_email,
     build_rejection_email,
+    build_interview_confirmed_email,
 )
 from app.auth_dependency import get_current_recruiter
+from app.config import ZOOM_MEETING_LINK
 
 router = APIRouter(prefix="/scheduling", tags=["scheduling"])
 
@@ -205,4 +207,49 @@ def submit_scorecard(candidate_id: str, review: RecruiterReview, _recruiter: dic
         "message": "Scorecard saved. Candidate marked as rejected.",
         "candidate_id": candidate_id,
         "stage": candidate["stage"],
+    }
+
+
+@router.post("/{candidate_id}/confirm-interview")
+def confirm_interview(
+    candidate_id: str,
+    confirmed_time: str = Body(..., embed=True),
+    _recruiter: dict = Depends(get_current_recruiter),
+):
+    """Recruiter-only. Picks one concrete time (read against the
+    candidate's own stated availability - see /candidates/{id}/
+    availability - though nothing here enforces it came from that
+    list, since the recruiter and candidate may have already agreed a
+    time some other way, e.g. a quick call) and locks it in. Sends the
+    ONE confirmation email in this flow - the candidate isn't asked to
+    pick/negotiate anything over email, they're just told the final
+    time and where to join. `confirmed_time` is a plain string (e.g.
+    "Thu 18 Sep, 11:00 AM IST") rather than a strict datetime, so the
+    recruiter can phrase it however reads clearly."""
+    if candidate_id not in CANDIDATES:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    candidate = CANDIDATES[candidate_id]
+    candidate["confirmed_interview"] = {
+        "time": confirmed_time,
+        "zoom_link": ZOOM_MEETING_LINK,
+    }
+    _save_candidate(candidate_id, candidate)
+
+    email_body = build_interview_confirmed_email(
+        candidate_name=candidate.get("full_name", "there"),
+        role=candidate.get("role_applied_for", ""),
+        confirmed_time=confirmed_time,
+        zoom_link=ZOOM_MEETING_LINK,
+    )
+    send_email(
+        to=candidate.get("email", "unknown@candidate.local"),
+        subject="Your interview is confirmed",
+        body=email_body,
+    )
+
+    return {
+        "message": "Interview confirmed - candidate notified by email.",
+        "candidate_id": candidate_id,
+        "confirmed_interview": candidate["confirmed_interview"],
     }

@@ -34,16 +34,19 @@ def recruiter_dashboard(
             q["competency_key"]: q["question"] for q in assessment_questions
         }
         transcript_by_competency = {}
+        pre_recording_seconds_by_competency = {}
         for entry in assessment_progress.values():
             comp_key = entry.get("competency_key")
             if comp_key:
                 transcript_by_competency[comp_key] = entry.get("transcript", "")
+                pre_recording_seconds_by_competency[comp_key] = entry.get("pre_recording_seconds", 0)
 
         competencies_enriched = []
         for c in (assessment.get("competencies", []) if assessment else []):
             enriched = dict(c)
             enriched["question"] = question_by_competency.get(c["key"], "")
             enriched["transcript"] = transcript_by_competency.get(c["key"], "")
+            enriched["pre_recording_seconds"] = pre_recording_seconds_by_competency.get(c["key"], 0)
             competencies_enriched.append(enriched)
 
         rows.append(
@@ -59,6 +62,8 @@ def recruiter_dashboard(
                 "fixed_salary": candidate.get("fixed_salary"),
                 "variable_pay": candidate.get("variable_pay"),
                 "availability_slots": candidate.get("availability_slots"),
+                "candidate_availability": candidate.get("candidate_availability"),
+                "confirmed_interview": candidate.get("confirmed_interview"),
                 "call_mode": candidate.get("call_mode"),
                 "resume_filename": candidate.get("resume_filename"),
                 "resume_original_name": candidate.get("resume_original_name"),

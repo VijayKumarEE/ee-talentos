@@ -92,6 +92,14 @@ AI_MONTHLY_BUDGET_USD = float(os.getenv("AI_MONTHLY_BUDGET_USD", "20"))
 # is ever missing/wrong.
 AI_MAX_ASSESSMENT_CALLS_PER_MONTH = int(os.getenv("AI_MAX_ASSESSMENT_CALLS_PER_MONTH", "500"))
 
+# --- Zoom (interview confirmation email) -----------------------------
+# Optional. A single shared meeting room link is enough for a
+# buildathon MVP - a real Zoom API integration (auto-creating a unique
+# meeting per interview) needs its own Zoom developer app/credentials,
+# which is more setup than this needs right now. If left blank, the
+# confirmation email just omits the link and says "link to follow."
+ZOOM_MEETING_LINK = os.getenv("ZOOM_MEETING_LINK", "")
+
 # --- CORS -------------------------------------------------------------
 # Comma-separated list of allowed origins for CLOUD MODE (e.g. your
 # GitHub Pages origin: "https://yourname.github.io"). LOCAL MODE keeps

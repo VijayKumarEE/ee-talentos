@@ -9,6 +9,7 @@ import {
   getRoles,
   getRecruiters,
   getStoredToken,
+  confirmInterview,
 } from "../api/client";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
@@ -34,6 +35,7 @@ type CompetencyResult = {
   follow_up_questions: string[];
   question?: string;
   transcript?: string;
+  pre_recording_seconds?: number;
 };
 
 type CandidateRow = {
@@ -62,6 +64,8 @@ type CandidateRow = {
   top_strengths?: string[];
   competencies?: CompetencyResult[];
   notes?: string | null;
+  candidate_availability?: { slots: string[]; notes: string } | null;
+  confirmed_interview?: { time: string; zoom_link: string } | null;
 };
 
 type RecordingInfo = {
@@ -76,6 +80,17 @@ const RECOMMENDATION_BADGE: Record<string, string> = {
   strong_match: "ee-badge--success",
   review: "ee-badge--warning",
   reject: "ee-badge--danger",
+};
+
+// The AI only ever produces a signal for the recruiter to weigh - it
+// never makes the actual reject/advance call, so its label shouldn't
+// read like a decision either. The underlying score/evidence and the
+// "reject" value used internally (thresholds, showcase sync, etc.) are
+// unchanged - only what's displayed to the recruiter is softened.
+const RECOMMENDATION_LABEL: Record<string, string> = {
+  strong_match: "Strong Match",
+  review: "Review",
+  reject: "Below Bar",
 };
 
 export default function RecruiterShortlistPage({ recruiterSlug: _unused }: Props) {
@@ -406,7 +421,7 @@ export default function RecruiterShortlistPage({ recruiterSlug: _unused }: Props
                 <div style={{ textAlign: "right" }}>
                   {row.recommendation ? (
                     <span className={`ee-badge ${RECOMMENDATION_BADGE[row.recommendation] || "ee-badge--neutral"}`}>
-                      {row.overall_score} / 5 - {row.recommendation.replace("_", " ")}
+                      {row.overall_score} / 5 - {RECOMMENDATION_LABEL[row.recommendation] || row.recommendation.replace("_", " ")}
                     </span>
                   ) : (
                     <span className="ee-badge ee-badge--neutral">Pending assessment</span>
@@ -555,6 +570,19 @@ export default function RecruiterShortlistPage({ recruiterSlug: _unused }: Props
                                 No transcript available (transcription may have failed, or ffmpeg/model isn't set up on this machine yet).
                               </p>
                             )}
+                            {(() => {
+                              const comp = row.competencies?.find((c) => c.question === rec.question);
+                              const seconds = comp?.pre_recording_seconds ?? 0;
+                              // A signal, not a verdict - a long pause reading the
+                              // question can just as easily mean thinking carefully.
+                              // Flagged only above a threshold so short, normal pauses
+                              // don't clutter every answer with a warning.
+                              return seconds > 30 ? (
+                                <p className="ee-muted" style={{ marginTop: 6, color: "var(--warning, #b58900)" }}>
+                                  &#9888; Question was on screen for {seconds}s before recording started.
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -575,6 +603,42 @@ export default function RecruiterShortlistPage({ recruiterSlug: _unused }: Props
                   <div className="ee-label" style={{ marginTop: 16 }}>Rejection reason</div>
                   <p style={{ marginTop: 4 }}>{row.rejection_reason}</p>
                 </>
+              )}
+
+              {row.candidate_availability &&
+                (row.candidate_availability.slots.length > 0 || row.candidate_availability.notes) && (
+                  <>
+                    <div className="ee-label" style={{ marginTop: 16 }}>Candidate's stated availability</div>
+                    {row.candidate_availability.slots.length > 0 && (
+                      <div className="ee-row" style={{ flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                        {row.candidate_availability.slots.map((slot) => (
+                          <span key={slot} className="ee-badge ee-badge--neutral">{slot}</span>
+                        ))}
+                      </div>
+                    )}
+                    {row.candidate_availability.notes && (
+                      <p style={{ marginTop: 6 }}>{row.candidate_availability.notes}</p>
+                    )}
+                  </>
+                )}
+
+              {row.confirmed_interview ? (
+                <>
+                  <div className="ee-label" style={{ marginTop: 16 }}>Confirmed interview time</div>
+                  <p style={{ marginTop: 4 }}>
+                    {row.confirmed_interview.time}
+                    {row.confirmed_interview.zoom_link ? ` - ${row.confirmed_interview.zoom_link}` : ""}
+                  </p>
+                </>
+              ) : (
+                (row.stage === "recruiter_scheduling_sent" ||
+                  row.stage === "panel_scheduling_sent" ||
+                  row.stage === "assessed") && (
+                  <ConfirmInterviewForm
+                    candidateId={row.candidate_id}
+                    onConfirmed={() => load()}
+                  />
+                )
               )}
 
               {(() => {
@@ -770,6 +834,64 @@ export default function RecruiterShortlistPage({ recruiterSlug: _unused }: Props
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+type ConfirmInterviewFormProps = {
+  candidateId: string;
+  onConfirmed: () => void;
+};
+
+function ConfirmInterviewForm({ candidateId, onConfirmed }: ConfirmInterviewFormProps) {
+  const [time, setTime] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleConfirm = async () => {
+    if (!time.trim()) {
+      setError("Enter the agreed date/time first.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      await confirmInterview(candidateId, time.trim());
+      onConfirmed();
+    } catch {
+      setError("Could not confirm the interview - try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="ee-label">Confirm interview time</div>
+      <p className="ee-muted" style={{ marginTop: 4, marginBottom: 8 }}>
+        Pick a time from the candidate's stated availability above (or one you've already agreed
+        another way), type it here, and confirm - this sends the candidate one email with the
+        time and meeting link.
+      </p>
+      <div className="ee-row" style={{ gap: 8 }}>
+        <input
+          type="text"
+          className="ee-input"
+          style={{ flex: 1, minWidth: 220 }}
+          placeholder='e.g. "Thu 18 Sep, 11:00 AM IST"'
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+        />
+        <button
+          type="button"
+          className="ee-btn ee-btn--primary"
+          disabled={submitting}
+          onClick={handleConfirm}
+        >
+          {submitting ? "Confirming..." : "Confirm & notify candidate"}
+        </button>
+      </div>
+      {error && <p style={{ marginTop: 6, color: "var(--danger)" }}>{error}</p>}
     </div>
   );
 }

@@ -187,6 +187,7 @@ def save_progress(
     tab_switch_count: int = Body(0),
     fullscreen_exit_count: int = Body(0),
     focus_loss_count: int = Body(0),
+    pre_recording_seconds: int = Body(0),
 ):
     """Save that a single question has been recorded, so progress
     survives a closed browser/tab. The actual recording file (if the
@@ -200,6 +201,16 @@ def save_progress(
     which we store as-is since they only ever increase. They're
     tracked as three separate signals (not merged into one number) so
     a recruiter can tell them apart on the Shortlist page.
+
+    pre_recording_seconds is different: how long THIS question sat on
+    screen before the candidate clicked Record. It exists to surface a
+    gap none of the during-recording checks above can see - a
+    candidate reading the question, looking the answer up elsewhere,
+    then coming back and reading it out loud while recording (which
+    looks completely clean to tab-switch/fullscreen/focus-loss
+    detection, since none of that happens WHILE recording). This is
+    still just a signal for the recruiter to weigh, not a hard block -
+    a long pause can just as easily mean someone thinking carefully.
 
     focus_loss_count specifically catches window-level OS focus loss
     (e.g. Alt-Tab/Cmd-Tab to a different application), which works on
@@ -220,6 +231,7 @@ def save_progress(
         "competency_key": competency_key,
         "mode": mode,
         "duration_seconds": duration_seconds,
+        "pre_recording_seconds": pre_recording_seconds,
         "recording_filename": existing.get("recording_filename"),
     }
 
