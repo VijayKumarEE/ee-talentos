@@ -22,11 +22,22 @@ history visible even after a candidate moves past it:
 
   4. scheduling.py -> submit_scorecard()
      Recruiter has actually spoken with the candidate and records the
-     outcome. Their notes/score attach to the Screening stage (that's
-     where the call happened). If advancing, the candidate also moves
-     to Take Home Test, which shows an automatic "assignment sent"
-     status - the real send isn't built yet, so this only ever says
-     it was sent, never anything about what's in it.
+     outcome. Only the decision (advance/reject) attaches to the
+     Screening stage (that's where the call happened) - the recruiter's
+     actual notes/score are PRIVATE recruiting data and are never
+     included in this public payload; they stay in Supabase/SQLite,
+     reachable only through the authenticated recruiter dashboard. If
+     advancing, the candidate also moves to Take Home Test, which shows
+     an automatic "assignment sent" status - the real send isn't built
+     yet, so this only ever says it was sent, never anything about
+     what's in it.
+
+PRIVACY (see also section 15/the CLOUD_DEPLOYMENT.md note): this data
+is pushed to a PUBLIC GitHub Pages site. Every payload builder below is
+deliberately minimal - name, role, stage, status, and the AI/recruiter
+DECISION only. It must never include email, phone, resume, recordings,
+transcripts, or recruiter notes/scores - those stay private, in
+Supabase/SQLite, behind the authenticated recruiter API only.
 
 Deliberately fire-and-forget throughout: every public function
 swallows its own errors and just prints a warning. A GitHub API hiccup
@@ -157,14 +168,17 @@ def _build_ai_report(assessment: Optional[dict]) -> Optional[dict]:
 
 
 def _build_recruiter_report(review: dict, advanced: bool) -> dict:
-    """The recruiter's own record of the actual screening call - distinct
-    from the AI report, and attached to Screening (where the call
-    happened), not to wherever the candidate ends up afterward."""
+    """PRIVACY: the recruiter's actual notes and score from the
+    screening call are private recruiting data - they stay in
+    Supabase/SQLite, reachable only through the authenticated recruiter
+    dashboard, and must NEVER reach this public payload. Only the
+    decision itself (advance/reject) is shown here, since that's
+    exactly the "stage progression / application status" the public
+    showcase is meant to demonstrate - not the private substance behind
+    it."""
     return {
         "type": "recruiter_review",
         "decision": "advance" if advanced else "reject",
-        "recruiter_notes": review.get("recruiter_notes"),
-        "recruiter_score": review.get("recruiter_score"),
     }
 
 
