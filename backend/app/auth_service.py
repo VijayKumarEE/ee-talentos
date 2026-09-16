@@ -12,7 +12,7 @@ present a valid, unexpired token to proceed.
 """
 
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.database import SessionLocal
@@ -23,11 +23,35 @@ from app.models import RecruiterSession
 SESSION_LIFETIME_HOURS = 12
 
 
+def _utcnow() -> datetime:
+    """Always timezone-AWARE UTC now - never the naive datetime.utcnow().
+
+    Why this matters: LOCAL MODE's SQLite stores/returns naive datetimes,
+    but CLOUD MODE's Postgres columns are `timestamptz`, so psycopg2
+    returns timezone-AWARE datetimes when reading expires_at back.
+    Comparing a naive datetime.utcnow() against that aware value raises
+    "can't compare offset-naive and offset-aware datetimes" - exactly
+    the crash this fixes. Using an aware "now" everywhere, plus
+    _ensure_aware() below on anything read back from the database,
+    makes every comparison safe regardless of which database is
+    actually in use."""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware(value: datetime) -> datetime:
+    """Normalizes a datetime that came back from the database to
+    timezone-aware UTC, whether the underlying column happened to
+    return it naive (SQLite) or aware (Postgres)."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def create_session(email: str, name: str, slug: str) -> dict:
     """Called on successful /auth/login. Returns the new token plus its
     expiry so the frontend can store both."""
     token = secrets.token_urlsafe(32)
-    now = datetime.utcnow()
+    now = _utcnow()
     expires_at = now + timedelta(hours=SESSION_LIFETIME_HOURS)
 
     db = SessionLocal()
@@ -65,7 +89,7 @@ def get_recruiter_for_token(token: str) -> Optional[dict]:
         if not row:
             return None
 
-        if row.expires_at < datetime.utcnow():
+        if _ensure_aware(row.expires_at) < _utcnow():
             db.delete(row)
             db.commit()
             return None
