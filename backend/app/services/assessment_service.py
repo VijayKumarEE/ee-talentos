@@ -1,5 +1,3 @@
-import json
-import re
 from typing import List, Optional, Dict, Any
 
 from app.schemas import (
@@ -12,7 +10,7 @@ from app.schemas import (
     Recommendation,
 )
 from app.question_bank import get_reference_for_role_competency, get_reference_for_specific_question
-from app.services.ollama_service import generate_with_ollama
+from app.providers.ai_provider import get_ai_provider
 
 LEVELS = [
     "novice",
@@ -86,127 +84,51 @@ def _rule_based_score(answer: str, comp_def: CompetencyDefinition) -> Competency
     )
 
 
-def _extract_json(text: str) -> Optional[Dict[str, Any]]:
-    """Ollama sometimes wraps JSON in markdown fences or adds stray
-    text around it. Try direct parse first, then fall back to pulling
-    out the first {...} block."""
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
-    return None
-
-
-def _ollama_score_competency(
-    answer: str, comp_def: CompetencyDefinition, role_label: str, role: str, candidate_id: str = ""
+def _competency_score_from_llm_result(
+    parsed: Dict[str, Any], comp_def: CompetencyDefinition, answer: str
 ) -> Optional[CompetencyScore]:
-    """Ask Ollama to judge the answer against real reference technical
-    knowledge, not just keyword-match it. Returns None on any failure
-    so the caller can fall back to the rule-based scorer.
-
-    Uses get_reference_for_specific_question() rather than the older
-    per-competency blob: since question selection is a deterministic
-    hash of (candidate_id, role, competency_key), replaying that same
-    hash here recovers the EXACT question this candidate was asked, so
-    scoring can use that one question's specific reference answers
-    instead of a generic mix covering every possible variant. Falls
-    back automatically to the old per-competency blob for any
-    role/competency without per-question data yet.
-
-    The "consulting" competency is a genuinely different kind of
-    question - a behavioral/consulting story with no technical
-    reference answer to grade against - so it gets its own prompt
-    entirely, judging communication and specificity rather than
-    technical correctness. Using the same "expert answer key" framing
-    for it would be actively wrong (there's no engineering soundness
-    to judge in a story about a disagreement with a teammate)."""
-    if comp_def.key == CompetencyKey.consulting:
-        prompt = f"""You are an interviewer assessing a candidate's communication skills based on a behavioral/consulting question, for a {role_label} role.
-
-This is NOT a technical question. There is no "correct" answer to grade against. Judge the answer purely on:
-- Whether the candidate gives a real, specific example (a real situation, what they actually did, what happened) rather than a vague generality or a hypothetical/textbook answer
-- Clarity of communication - is the answer easy to follow, well-structured, and specific rather than rambling or evasive
-- Whether they actually answered the question that was asked, rather than talking around it
-
-Question asked: {comp_def.prompt}
-
-Candidate's answer:
-\"\"\"{answer if answer else "(no answer provided)"}\"\"\"
-
-Score the candidate's answer from 0 to 5 based on communication quality and specificity of example - NOT technical correctness, since there is none to assess here.
-
-Respond with ONLY a single JSON object, no markdown formatting, no code fences, no extra text, in exactly this shape:
-{{"score": <number 0-5>, "positive": ["<short evidence point>"], "gaps": ["<short gap point>"], "summary": "<one sentence>"}}
-"""
-    else:
-        reference = get_reference_for_specific_question(role, comp_def.key.value, candidate_id)
-
-        prompt = f"""You are an interviewer scoring a candidate's answer for a {role_label} role.
-
-Competency being assessed: {comp_def.label}
-What this competency covers: {comp_def.prompt}
-
-Reference knowledge (the "expert answer key" - use this to judge accuracy, do not just check for keyword overlap):
-{reference if reference else "No specific reference material - judge on general engineering soundness."}
-
-Candidate's answer:
-\"\"\"{answer if answer else "(no answer provided)"}\"\"\"
-
-Score the candidate's answer from 0 to 5 based on how well it demonstrates real understanding of the correct mechanics, not just mentioning the right buzzwords.
-
-Respond with ONLY a single JSON object, no markdown formatting, no code fences, no extra text, in exactly this shape:
-{{"score": <number 0-5>, "positive": ["<short evidence point>"], "gaps": ["<short gap point>"], "summary": "<one sentence>"}}
-"""
+    """Turns one provider result ({"score", "positive", "gaps",
+    "summary"}) into a CompetencyScore. Shared by both providers so
+    the actual grading rules (level mapping, follow-up-question
+    thresholds) are identical regardless of whether the judgment came
+    from Ollama or OpenRouter."""
+    if not parsed or "score" not in parsed:
+        return None
 
     try:
-        raw = generate_with_ollama(prompt, timeout=OLLAMA_SCORING_TIMEOUT_SECONDS)
-        parsed = _extract_json(raw)
-
-        if not parsed or "score" not in parsed:
-            return None
-
         score = float(parsed["score"])
-        score = max(0.0, min(score, 5.0))
-        level = _score_to_level(score)
-
-        evidence = SkillEvidence(
-            positive=[str(p) for p in parsed.get("positive", [])][:5],
-            gaps=[str(g) for g in parsed.get("gaps", [])][:5],
-            risk_flags=[],
-        )
-
-        if not answer:
-            evidence.risk_flags.append("No evidence")
-
-        follow_ups = []
-        if score < 3.5:
-            follow_ups.append(f"Can you give a concrete example for {comp_def.label}?")
-        if score < 4.5 and comp_def.key != CompetencyKey.consulting:
-            follow_ups.append(f"What trade-offs did you consider in {comp_def.label}?")
-
-        summary = parsed.get("summary") or f"{comp_def.label}: {level} ({score}/5)"
-
-        return CompetencyScore(
-            key=comp_def.key,
-            label=comp_def.label,
-            score=score,
-            level=level,
-            evidence=evidence,
-            summary=summary,
-            follow_up_questions=follow_ups,
-        )
-    except Exception:
-        # Any failure (timeout, connection refused, bad JSON, etc.)
-        # falls back to the rule-based scorer - never breaks the demo.
+    except (TypeError, ValueError):
         return None
+
+    score = max(0.0, min(score, 5.0))
+    level = _score_to_level(score)
+
+    evidence = SkillEvidence(
+        positive=[str(p) for p in parsed.get("positive", [])][:5],
+        gaps=[str(g) for g in parsed.get("gaps", [])][:5],
+        risk_flags=[],
+    )
+
+    if not answer:
+        evidence.risk_flags.append("No evidence")
+
+    follow_ups = []
+    if score < 3.5:
+        follow_ups.append(f"Can you give a concrete example for {comp_def.label}?")
+    if score < 4.5 and comp_def.key != CompetencyKey.consulting:
+        follow_ups.append(f"What trade-offs did you consider in {comp_def.label}?")
+
+    summary = parsed.get("summary") or f"{comp_def.label}: {level} ({score}/5)"
+
+    return CompetencyScore(
+        key=comp_def.key,
+        label=comp_def.label,
+        score=score,
+        level=level,
+        evidence=evidence,
+        summary=summary,
+        follow_up_questions=follow_ups,
+    )
 
 
 def analyze_assessment(
@@ -215,14 +137,23 @@ def analyze_assessment(
     role_slug: str = "operability-engineer",
 ) -> CandidateAssessmentResponse:
     competencies: List[CompetencyScore] = []
-    used_ollama_count = 0
+    used_llm_count = 0
+
+    # One provider call covers every competency (Ollama loops internally
+    # per-competency, unchanged; OpenRouter makes exactly one combined
+    # request - see providers/ai_provider.py for why).
+    provider = get_ai_provider()
+    llm_results = provider.score_all(
+        competency_defs, payload.answers, payload.role, role_slug, payload.candidate_id
+    )
 
     for comp_def in competency_defs:
         answer = (payload.answers.get(comp_def.key.value, "") or "").strip()
 
-        result = _ollama_score_competency(answer, comp_def, payload.role, role_slug, payload.candidate_id)
+        parsed = llm_results.get(comp_def.key.value)
+        result = _competency_score_from_llm_result(parsed, comp_def, answer) if parsed else None
         if result is not None:
-            used_ollama_count += 1
+            used_llm_count += 1
         else:
             result = _rule_based_score(answer.lower(), comp_def)
 
@@ -238,10 +169,10 @@ def analyze_assessment(
         recommendation = Recommendation.reject
 
     scoring_model = (
-        "ollama_llm"
-        if used_ollama_count == len(competencies)
-        else "ollama_llm_partial_fallback"
-        if used_ollama_count > 0
+        "llm_scored"
+        if used_llm_count == len(competencies)
+        else "llm_partial_fallback"
+        if used_llm_count > 0
         else "rule_based_fallback"
     )
 
@@ -257,6 +188,6 @@ def analyze_assessment(
         metadata={
             "competency_count": len(competencies),
             "scoring_model": scoring_model,
-            "ollama_scored_count": used_ollama_count,
+            "llm_scored_count": used_llm_count,
         },
     )

@@ -1,0 +1,21 @@
+# Secrets - never commit a real .env
+.env
+.env.local
+
+# Local runtime data (SQLite DB + uploaded files) - never commit real
+# candidate data or resumes/recordings.
+mvp.db
+uploaded_resumes/
+uploaded_recordings/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/

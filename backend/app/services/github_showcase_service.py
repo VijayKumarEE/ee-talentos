@@ -211,8 +211,12 @@ def push_candidate_applied(candidate: dict) -> None:
         "name": candidate.get("full_name", "Unknown Candidate"),
         "current_title": candidate.get("current_role") or "Not specified",
         "current_company": candidate.get("current_organization") or "Not specified",
-        "email": candidate.get("email", ""),
-        "phone": candidate.get("phone", ""),
+        # PRIVACY (handover brief, section 15): this data is pushed to a
+        # PUBLIC GitHub Pages site. email/phone/resume/recordings/full
+        # transcripts/private recruiter notes must NEVER be included here
+        # - only the minimum safe demonstration fields. The full private
+        # record stays in Supabase/SQLite, reachable only through the
+        # authenticated recruiter dashboard.
         "applied_date": applied_date,
         "years_experience": total_years,
         "status": "rejected" if auto_rejected else "active",

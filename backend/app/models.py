@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, String, DateTime, Integer, JSON
+from sqlalchemy import Column, String, DateTime, Integer, JSON, Float, Boolean
 from app.database import Base
 
 
@@ -61,3 +61,23 @@ class RecruiterSession(Base):
     recruiter_slug = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False, index=True)
+
+
+class AIUsageLog(Base):
+    """One row per OpenRouter call (CLOUD MODE only - LOCAL MODE uses
+    Ollama, which is free, so nothing is logged there). Used by
+    app/cost_guard.py to enforce the monthly budget/call-count ceiling
+    and to give a simple usage report. Never used to gate anything in
+    LOCAL MODE.
+    """
+
+    __tablename__ = "ai_usage_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    candidate_id = Column(String, nullable=True, index=True)
+    call_type = Column(String, nullable=False)  # "assessment" | "transcription" | "resume_extraction"
+    model = Column(String, nullable=True)
+    # Cost in USD if OpenRouter reported it on this call, else null.
+    cost_usd = Column(Float, nullable=True)
+    success = Column(Boolean, nullable=False, default=True)

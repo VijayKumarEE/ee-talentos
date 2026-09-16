@@ -31,7 +31,9 @@ import json
 import re
 from typing import Optional
 
+from app.config import APP_MODE, OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_ASSESSMENT_MODEL
 from app.services.ollama_service import generate_with_ollama
+from app.cost_guard import check_budget_or_raise, log_usage, BudgetExceeded
 
 RESUME_PARSE_TIMEOUT_SECONDS = 60
 
@@ -211,6 +213,60 @@ def _extract_json(text: str) -> Optional[dict]:
     return None
 
 
+def _generate_for_resume_extraction(prompt: str) -> str:
+    """LOCAL MODE: Ollama, unchanged. CLOUD MODE: OpenRouter, using the
+    same cheap assessment model (this is a tiny, infrequent call - one
+    per resume upload - so a separate model/env var isn't warranted).
+    Returns "" on any failure so the caller always falls back to
+    leaving these fields blank for manual entry, exactly as before."""
+    if APP_MODE != "cloud":
+        return generate_with_ollama(prompt, timeout=RESUME_PARSE_TIMEOUT_SECONDS)
+
+    if not OPENROUTER_API_KEY:
+        return ""
+
+    try:
+        check_budget_or_raise("resume_extraction")
+    except BudgetExceeded as exc:
+        print(f"[resume_parsing_service] {exc}")
+        return ""
+
+    import httpx
+
+    try:
+        resp = httpx.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENROUTER_ASSESSMENT_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=RESUME_PARSE_TIMEOUT_SECONDS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+
+        usage = data.get("usage", {}) or {}
+        cost = usage.get("cost") or usage.get("total_cost")
+        log_usage(
+            "resume_extraction",
+            model=OPENROUTER_ASSESSMENT_MODEL,
+            cost_usd=float(cost) if cost is not None else None,
+            success=True,
+        )
+        return content
+    except Exception as exc:
+        print(f"[resume_parsing_service] OpenRouter extraction failed: {exc}")
+        log_usage("resume_extraction", model=OPENROUTER_ASSESSMENT_MODEL, success=False)
+        return ""
+
+
 def _extract_location_org_and_title_via_ai(resume_text: str) -> dict:
     """current_location, current_organization, and current_title all go
     through the AI - these need contextual understanding, not the
@@ -240,7 +296,7 @@ Respond with ONLY a single JSON object, no markdown, no extra text, in exactly t
 """
 
     try:
-        raw = generate_with_ollama(prompt, timeout=RESUME_PARSE_TIMEOUT_SECONDS)
+        raw = _generate_for_resume_extraction(prompt)
         parsed = _extract_json(raw)
 
         if not parsed:

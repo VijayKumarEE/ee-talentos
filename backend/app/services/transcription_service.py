@@ -35,6 +35,27 @@ def _get_model():
     return _model
 
 
+def _resolve_ffmpeg_binary() -> str:
+    """Finds an ffmpeg binary to run. Prefers a system-installed
+    ffmpeg (what LOCAL MODE normally has via `brew install ffmpeg`
+    etc.). Falls back to the small static binary bundled by the
+    `imageio-ffmpeg` pip package - this is what makes video-answer
+    transcription work in CLOUD MODE on a plain Python buildpack (e.g.
+    Render's free tier), which has no system ffmpeg and no apt-get
+    access without switching to a Docker-based service."""
+    import shutil as _shutil
+
+    system_ffmpeg = _shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"  # will raise FileNotFoundError below, handled by caller
+
+
 def _extract_audio_from_video(video_path: Path) -> Optional[Path]:
     """Pulls just the audio track out of a video/webm file into a WAV
     file, using ffmpeg. Returns None if ffmpeg isn't available or the
@@ -44,7 +65,7 @@ def _extract_audio_from_video(video_path: Path) -> Optional[Path]:
     try:
         subprocess.run(
             [
-                "ffmpeg", "-y",
+                _resolve_ffmpeg_binary(), "-y",
                 "-i", str(video_path),
                 "-vn",  # no video
                 "-acodec", "pcm_s16le",
@@ -58,7 +79,7 @@ def _extract_audio_from_video(video_path: Path) -> Optional[Path]:
         )
         return audio_path
     except FileNotFoundError:
-        print("[transcription] ffmpeg not found on this machine - install it with 'brew install ffmpeg' to transcribe video recordings.")
+        print("[transcription] ffmpeg not found on this machine - install it with 'brew install ffmpeg' (local) or add 'imageio-ffmpeg' to requirements.txt (cloud) to transcribe video recordings.")
         return None
     except Exception as e:
         print(f"[transcription] Failed to extract audio from video: {e}")

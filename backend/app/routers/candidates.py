@@ -3,7 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.schemas import CandidateApply
 from app.store import CANDIDATES
@@ -16,13 +16,17 @@ from app.services.resume_parsing_service import extract_resume_text, extract_can
 from app.services.github_showcase_service import push_candidate_applied
 from app.rate_limiter import check_rate_limit
 from app.auth_dependency import get_current_recruiter
+from app.providers.storage_provider import get_storage_provider
+from app.config import IS_CLOUD_MODE
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
 
-# Resumes are stored on disk under backend/uploaded_resumes/, keyed by
-# candidate_id, so the recruiter dashboard can link to the original file.
-RESUME_DIR = Path(__file__).resolve().parent.parent.parent / "uploaded_resumes"
-RESUME_DIR.mkdir(exist_ok=True)
+# LOCAL MODE: resumes on disk under backend/uploaded_resumes/.
+# CLOUD MODE: resumes in the Supabase "resumes" bucket, private,
+# accessed only via short-lived signed URLs (see storage_provider.py).
+# Either way, routers only ever go through storage_provider - never
+# touch a filesystem path directly - so this switch is invisible here.
+storage = get_storage_provider()
 
 ALLOWED_RESUME_EXTENSIONS = {".pdf", ".doc", ".docx"}
 MAX_RESUME_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -124,40 +128,48 @@ def upload_resume(candidate_id: str, file: UploadFile = File(...)):
     if len(contents) > MAX_RESUME_SIZE_BYTES:
         raise HTTPException(status_code=400, detail="Resume file is too large (max 10MB).")
 
-    safe_filename = f"{candidate_id}{ext}"
-    file_path = RESUME_DIR / safe_filename
-
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    storage_ref = storage.save_resume(candidate_id, ext, contents)
 
     candidate = CANDIDATES[candidate_id]
-    candidate["resume_filename"] = safe_filename
+    candidate["resume_filename"] = storage_ref
     candidate["resume_original_name"] = file.filename
     CANDIDATES[candidate_id] = candidate
 
     return {
         "message": "Resume uploaded",
         "candidate_id": candidate_id,
-        "resume_filename": safe_filename,
+        "resume_filename": storage_ref,
     }
 
 
 @router.get("/{candidate_id}/resume")
 def download_resume(candidate_id: str, _recruiter: dict = Depends(get_current_recruiter)):
+    """LOCAL MODE serves the file directly. CLOUD MODE redirects to a
+    short-lived Supabase signed URL - the resume itself is never public,
+    and this route is still behind get_current_recruiter, so a
+    candidate can never mint their own signed URL for anyone's resume,
+    only a logged-in recruiter can reach this route at all."""
     if candidate_id not in CANDIDATES:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     candidate = CANDIDATES[candidate_id]
-    filename = candidate.get("resume_filename")
+    storage_ref = candidate.get("resume_filename")
 
-    if not filename:
+    if not storage_ref:
         raise HTTPException(status_code=404, detail="No resume uploaded for this candidate")
 
-    file_path = RESUME_DIR / filename
+    if IS_CLOUD_MODE:
+        try:
+            signed_url = storage.get_resume_path_or_url(storage_ref)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Resume file missing in storage")
+        return RedirectResponse(url=signed_url)
+
+    file_path = Path(storage.get_resume_path_or_url(storage_ref))
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Resume file missing on disk")
 
-    original_name = candidate.get("resume_original_name") or filename
+    original_name = candidate.get("resume_original_name") or storage_ref
     return FileResponse(path=file_path, filename=original_name)
 
 
@@ -175,15 +187,23 @@ def delete_candidate(candidate_id: str, _recruiter: dict = Depends(get_current_r
 
     candidate = CANDIDATES[candidate_id]
 
-    resume_filename = candidate.get("resume_filename")
-    if resume_filename:
-        resume_path = RESUME_DIR / resume_filename
-        if resume_path.exists():
-            resume_path.unlink()
+    # Best-effort file cleanup. LOCAL MODE deletes from disk directly;
+    # CLOUD MODE is intentionally not deleted from Supabase Storage here
+    # (buildathon MVP scope - see HANDOVER addendum) - the database
+    # record is removed either way, which is what the dashboard/API
+    # actually reads.
+    if not IS_CLOUD_MODE:
+        from app.providers.storage_provider import RESUME_DIR, RECORDING_DIR
 
-    recording_dir = RESUME_DIR.parent / "uploaded_recordings" / candidate_id
-    if recording_dir.exists():
-        shutil.rmtree(recording_dir)
+        resume_filename = candidate.get("resume_filename")
+        if resume_filename:
+            resume_path = RESUME_DIR / resume_filename
+            if resume_path.exists():
+                resume_path.unlink()
+
+        recording_dir = RECORDING_DIR / candidate_id
+        if recording_dir.exists():
+            shutil.rmtree(recording_dir)
 
     del CANDIDATES[candidate_id]
     if candidate_id in ASSESSMENTS:

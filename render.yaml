@@ -1,0 +1,62 @@
+# Render "Blueprint" for the FastAPI backend - free tier.
+#
+# Usage: Render dashboard -> New -> Blueprint -> point at this repo/
+# branch (cloud-demo) -> Render reads this file and proposes the
+# service below. You still set the actual secret values (OPENROUTER_
+# API_KEY, SUPABASE_DB_URL, etc.) in the Render dashboard after
+# creation - never commit real values here.
+#
+# Free-tier note (handover brief, section 5): Render's free web
+# services sleep after ~15 minutes of no traffic and take a bit to
+# wake back up on the next request. The candidate/recruiter app will
+# still work - the first request after a period of inactivity is just
+# slower (a "cold start"). This is expected and documented behavior,
+# not a bug; see the deployment README for how to explain this to your
+# team.
+
+services:
+  - type: web
+    name: ee-talentos-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_MODE
+        value: cloud
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_RESUME_BUCKET
+        value: resumes
+      - key: SUPABASE_RECORDING_BUCKET
+        value: recordings
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_ASSESSMENT_MODEL
+        value: google/gemini-2.5-flash
+      - key: OPENROUTER_TRANSCRIPTION_MODEL
+        value: google/gemini-2.5-flash
+      - key: AI_MONTHLY_BUDGET_USD
+        value: "20"
+      - key: AI_MAX_ASSESSMENT_CALLS_PER_MONTH
+        value: "500"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_OWNER
+        sync: false
+      - key: GITHUB_REPO
+        sync: false
+      - key: GITHUB_BRANCH
+        value: main
+      - key: GITHUB_DATA_PATH
+        value: data/candidates.json

@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Body, UploadFile, File, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.competencies import get_assessment_plan_for_candidate, get_competencies_for_role
 from app.schemas import (
@@ -20,9 +20,11 @@ from app.services.email_service import (
     send_email,
     build_recruiter_assessment_complete_email,
 )
-from app.services.transcription_service import transcribe_recording
 from app.services.github_showcase_service import push_assessment_scored
 from app.auth_dependency import get_current_recruiter
+from app.providers.storage_provider import get_storage_provider
+from app.providers.transcription_provider import get_transcription_provider
+from app.config import IS_CLOUD_MODE
 
 router = APIRouter(prefix="/assessment", tags=["assessment"])
 
@@ -34,10 +36,11 @@ router = APIRouter(prefix="/assessment", tags=["assessment"])
 # real question content the same way DevOps and Backend Engineer did.
 ROLES_WITH_CONSULTING_QUESTION = {"operability-engineer", "backend-engineer"}
 
-# Recordings stored on disk under backend/uploaded_recordings/{candidate_id}/,
-# one file per question, so recruiters can actually play them back.
-RECORDING_DIR = Path(__file__).resolve().parent.parent.parent / "uploaded_recordings"
-RECORDING_DIR.mkdir(exist_ok=True)
+# LOCAL MODE: recordings on disk under backend/uploaded_recordings/.
+# CLOUD MODE: recordings in the Supabase "recordings" bucket, private,
+# played back only via short-lived signed URLs.
+storage = get_storage_provider()
+transcription = get_transcription_provider()
 
 
 @router.post("/questions", response_model=AssessmentQuestionsResponse)
@@ -105,9 +108,23 @@ def generate_questions(payload: AssessmentQuestionsRequest):
 
 
 @router.post("/analyze")
-def analyze_candidate(payload: CandidateAssessmentRequest):
+def analyze_candidate(payload: CandidateAssessmentRequest, retry: bool = False):
+    """Runs AI scoring for a candidate's assessment.
+
+    IMPORTANT - do-not-reprocess guard (handover brief, section 12):
+    a candidate/recruiter accidentally hitting this twice (refresh,
+    double-submit, retry) must not silently trigger a second paid
+    OpenRouter call and must not create a duplicate assessment record.
+    If this candidate already has a saved assessment AND the caller
+    did not explicitly pass retry=true, the existing result is
+    returned as-is - no new LLM call is made, no email is re-sent, and
+    the showcase is not re-pushed."""
     if payload.candidate_id not in CANDIDATES:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    existing_assessment = ASSESSMENTS.get(payload.candidate_id)
+    if existing_assessment and not retry:
+        return existing_assessment
 
     candidate = CANDIDATES[payload.candidate_id]
     role_slug = candidate.get("role_applied_for", "operability-engineer")
@@ -235,34 +252,66 @@ def upload_recording(
     question_id: str = Body(...),
     mode: str = Body(...),
     file: UploadFile = File(...),
+    retry: bool = Body(False),
 ):
-    """Actually stores the candidate's audio/video recording on disk,
-    so a recruiter can listen/watch it later - not just metadata."""
+    """Stores the candidate's audio/video recording (disk in LOCAL
+    MODE, Supabase Storage in CLOUD MODE) and transcribes it.
+
+    IMPORTANT - do-not-reprocess guard (see handover brief, section 12):
+    a candidate refreshing or re-submitting the same question must not
+    silently trigger another paid OpenRouter transcription call. If
+    this question already has a status of "transcribed" (or is
+    currently "transcribing"), the upload is accepted and the file is
+    re-saved, but transcription is skipped and the existing transcript
+    is kept - UNLESS the caller explicitly passes retry=true, which is
+    the only path that re-runs transcription on an already-processed
+    recording."""
     if candidate_id not in CANDIDATES:
         raise HTTPException(status_code=404, detail="Candidate not found")
-
-    candidate_dir = RECORDING_DIR / candidate_id
-    candidate_dir.mkdir(exist_ok=True)
-
-    ext = "webm"
-    safe_filename = f"{question_id}.{ext}"
-    file_path = candidate_dir / safe_filename
-
-    contents = file.file.read()
-    with open(file_path, "wb") as f:
-        f.write(contents)
-
-    # Transcribe locally (faster-whisper, free, no API key) so scoring
-    # can use the candidate's actual words instead of a placeholder.
-    # Never blocks/crashes the upload if transcription fails.
-    transcript = transcribe_recording(file_path, mode)
 
     candidate = CANDIDATES[candidate_id]
     progress = candidate.get("assessment_progress", {})
     entry = progress.get(question_id, {})
-    entry["recording_filename"] = safe_filename
-    entry["transcript"] = transcript
+
+    existing_status = entry.get("transcription_status")
+    already_processed = existing_status in ("transcribed", "transcribing") and not retry
+
+    contents = file.file.read()
+    storage_ref = storage.save_recording(candidate_id, question_id, contents)
+
+    entry["recording_filename"] = storage_ref
     entry["mode"] = mode
+
+    if already_processed:
+        # Keep the existing transcript/status untouched - this is
+        # exactly the "don't reprocess" guard: no new transcription
+        # call happens here.
+        progress[question_id] = entry
+        candidate["assessment_progress"] = progress
+        CANDIDATES[candidate_id] = candidate
+        return {"message": "Recording re-uploaded; using existing transcript", "question_id": question_id}
+
+    entry["transcription_status"] = "transcribing"
+    progress[question_id] = entry
+    candidate["assessment_progress"] = progress
+    CANDIDATES[candidate_id] = candidate
+
+    if IS_CLOUD_MODE:
+        local_copy = storage.local_temp_copy(storage_ref, "recordings")
+        try:
+            transcript = transcription.transcribe(local_copy, mode, candidate_id)
+        finally:
+            if local_copy.exists():
+                local_copy.unlink()
+    else:
+        file_path = Path(storage.get_recording_path_or_url(storage_ref))
+        transcript = transcription.transcribe(file_path, mode, candidate_id)
+
+    candidate = CANDIDATES[candidate_id]
+    progress = candidate.get("assessment_progress", {})
+    entry = progress.get(question_id, {})
+    entry["transcript"] = transcript
+    entry["transcription_status"] = "transcribed" if transcript else "failed"
     progress[question_id] = entry
     candidate["assessment_progress"] = progress
     CANDIDATES[candidate_id] = candidate
@@ -273,19 +322,28 @@ def upload_recording(
 @router.get("/recording/{candidate_id}/{question_id}")
 def download_recording(candidate_id: str, question_id: str, _recruiter: dict = Depends(get_current_recruiter)):
     """Serves a candidate's recording back for playback (recruiter
-    side) - matches the same on-disk pattern as resume download."""
+    side). LOCAL MODE serves the file directly; CLOUD MODE redirects
+    to a short-lived signed URL - still behind get_current_recruiter,
+    so only a logged-in recruiter can ever mint one."""
     if candidate_id not in CANDIDATES:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     candidate = CANDIDATES[candidate_id]
     progress = candidate.get("assessment_progress", {})
     entry = progress.get(question_id, {})
-    filename = entry.get("recording_filename")
+    storage_ref = entry.get("recording_filename")
 
-    if not filename:
+    if not storage_ref:
         raise HTTPException(status_code=404, detail="No recording found for this question")
 
-    file_path = RECORDING_DIR / candidate_id / filename
+    if IS_CLOUD_MODE:
+        try:
+            signed_url = storage.get_recording_path_or_url(storage_ref)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Recording file missing in storage")
+        return RedirectResponse(url=signed_url)
+
+    file_path = Path(storage.get_recording_path_or_url(storage_ref))
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Recording file missing on disk")
 

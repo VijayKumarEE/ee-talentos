@@ -23,3 +23,13 @@ uvicorn==0.39.0
 faster-whisper==1.2.1
 pypdf==5.1.0
 python-docx==1.1.2
+
+# --- CLOUD MODE only (APP_MODE=cloud) ---
+# Needed to connect to Supabase's Postgres database. Safe to install
+# even in LOCAL MODE - it's simply unused until APP_MODE=cloud.
+psycopg2-binary==2.9.10
+# Bundles a static ffmpeg binary so video-answer transcription works
+# on a plain Python host with no system ffmpeg and no apt-get access
+# (e.g. Render's free tier). LOCAL MODE keeps using your system ffmpeg
+# if one is already on PATH (see services/transcription_service.py).
+imageio-ffmpeg==0.5.1

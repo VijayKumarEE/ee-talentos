@@ -1,4 +1,8 @@
-const API_BASE = "http://127.0.0.1:8000";
+// Local dev default keeps working with zero .env setup, exactly as
+// before. CLOUD MODE builds set VITE_API_BASE_URL (a PUBLIC value -
+// just a URL, never a secret) at build time via GitHub Actions - see
+// .github/workflows/deploy-pages.yml.
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 // --- Recruiter session token helpers --------------------------------
 // RecruiterLogin.tsx stores the full /auth/login response (which now
