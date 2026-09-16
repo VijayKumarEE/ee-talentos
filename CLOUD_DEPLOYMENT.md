@@ -123,10 +123,6 @@ Your existing local setup requires zero changes. To confirm:
 
 ---
 
-## Open item needing your decision
+## Privacy: what the public showcase does and doesn't show
 
-Your brief describes two things that are in tension:
-- Section 13/14 says the recruiter's screening notes/score should be visible on the public GitHub showcase (part of demonstrating "the complete recruitment journey").
-- Section 15 says private recruiter notes should NOT be exposed on the public showcase unless you explicitly choose to.
-
-I left this exactly as it was (recruiter notes/score ARE pushed to the showcase, as originally built) since section 13's description of the showcase's whole purpose depends on it, and recruiter screening notes are closer to "structured evaluation feedback" than to raw PII like email/phone/resume files (which I did remove). If you'd rather those notes stay private too, tell me and I'll strip `recruiter_notes`/`recruiter_score` from `_build_recruiter_report()` in `github_showcase_service.py` - it's a small, contained change.
+The public GitHub Pages showcase only ever receives: candidate name, role, applied date, years of experience, application stage, application status, and the AI assessment (scores/evidence/recommendation). It never receives email, phone, resume files, recordings, transcripts, or the recruiter's private screening notes/score - those stay in Supabase/SQLite, reachable only through the authenticated recruiter API. This was verified with an automated test that pushes a candidate through the full apply -> AI assessment -> shortlist -> recruiter scorecard journey and asserts the pushed showcase payload never contains the candidate's email, phone, or recruiter notes, while confirming the same data IS still present and retrievable via the recruiter dashboard/database.
