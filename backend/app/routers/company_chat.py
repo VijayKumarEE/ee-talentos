@@ -49,11 +49,69 @@ from app.company_info import (
 )
 from app.roles import ROLES
 from app.rate_limiter import check_rate_limit
+from app.config import APP_MODE, OPENROUTER_API_KEY, OPENROUTER_BASE_URL, OPENROUTER_ASSESSMENT_MODEL
 from app.services.ollama_service import generate_with_ollama
+from app.cost_guard import check_budget_or_raise, log_usage, BudgetExceeded
 
 router = APIRouter(prefix="/company-chat", tags=["company-chat"])
 
 CHAT_TIMEOUT_SECONDS = 15
+
+
+def _generate_for_classification(prompt: str) -> str:
+    """LOCAL MODE: Ollama, unchanged. CLOUD MODE: OpenRouter. This is a
+    classification-only call (topic + optional role, from a small
+    fixed list) - short prompt, short response - so it reuses the same
+    cheap assessment model rather than needing its own env var.
+    Returns "" on any failure so the caller always falls back to
+    FALLBACK_REPLY, exactly as it already did against a down/missing
+    Ollama."""
+    if APP_MODE != "cloud":
+        return generate_with_ollama(prompt, timeout=CHAT_TIMEOUT_SECONDS)
+
+    if not OPENROUTER_API_KEY:
+        return ""
+
+    try:
+        check_budget_or_raise("chat_classification")
+    except BudgetExceeded as exc:
+        print(f"[company_chat] {exc}")
+        return ""
+
+    import httpx
+
+    try:
+        resp = httpx.post(
+            f"{OPENROUTER_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OPENROUTER_ASSESSMENT_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=CHAT_TIMEOUT_SECONDS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+
+        usage = data.get("usage", {}) or {}
+        cost = usage.get("cost") or usage.get("total_cost")
+        log_usage(
+            "chat_classification",
+            model=OPENROUTER_ASSESSMENT_MODEL,
+            cost_usd=float(cost) if cost is not None else None,
+            success=True,
+        )
+        return content
+    except Exception as exc:
+        print(f"[company_chat] OpenRouter classification failed: {exc}")
+        log_usage("chat_classification", model=OPENROUTER_ASSESSMENT_MODEL, success=False)
+        return ""
 
 FALLBACK_REPLY = (
     "I can help with information about Equal Experts - our LinkedIn page, "
@@ -112,7 +170,7 @@ Respond with ONLY a single JSON object, no markdown, no extra text, in exactly t
 """
 
     try:
-        raw = generate_with_ollama(prompt, timeout=CHAT_TIMEOUT_SECONDS)
+        raw = _generate_for_classification(prompt)
         parsed = _extract_json(raw)
 
         if not parsed or "topic" not in parsed:
