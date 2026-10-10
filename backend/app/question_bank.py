@@ -38,7 +38,7 @@ QUESTION_BANK: Dict[str, Dict[str, List[str]]] = {
         ],
         "technical_aptitude": [
            “A pod is stuck in Terminating for over 30 minutes after you run kubectl delete pod. What are the likely causes, how would you safely diagnose it, and what would make you avoid a force delete?”
-→ Good answer touches on: finalizers, stuck volume unmounts, why --force --grace-period=0 is risky on stateful workloads (can cause split-brain/data corruption since the old pod process may still be running),
+           → Good answer touches on: finalizers, stuck volume unmounts, why --force --grace-period=0 is risky on stateful workloads (can cause split-brain/data corruption since the old pod process may still be running),
         ],
         "continuous_delivery": [
             "Your team wants to stop developers from accidentally deploying insecure configurations - like mutable `:latest` tags or privileged root containers - straight into production. How would you build that guardrail into the deployment pipeline?",
