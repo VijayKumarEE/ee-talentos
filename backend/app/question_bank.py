@@ -25,31 +25,9 @@ QUESTION_BANK: Dict[str, Dict[str, List[str]]] = {
             “Your monitoring shows a spike in 5xx errors right after a rolling update, but only for about 30 seconds each time. What would you check first, and what’s your hypothesis for the root cause?”
             → Good answer touches on: readiness probes not gating traffic fast enough, old pods being terminated before new ones are ready, proxy/keep-alive timeout mismatches.,
         ],
-        "automation": [
-            "You need to containerize a Python service for a banking client with a zero-vulnerability, immutable deployment requirement. Walk me through how you'd build and harden that Docker image, and why each step matters.",
-            "A teammate wants to skip multi-stage Docker builds to save time on a deadline. What would you tell them about the trade-offs, and what's the minimum you wouldn't compromise on?",
-            "How would you explain the difference between pinning a base image by tag versus by SHA256 digest to someone who thinks tags are 'good enough'?",
-            "You're reviewing a Dockerfile that runs the app as root and copies the entire build toolchain into the final image. What would you flag, and how would you fix each issue?",
-            "Why does using an exact digest instead of a mutable tag matter for supply-chain security, and what's a concrete scenario where a mutable tag caused real harm?",
-            "Two engineers run `terraform apply` against the same production environment at almost the same time. What's supposed to stop that from corrupting your infrastructure state, and what would you tell a team that isn't already doing it?",
-            "A `terraform apply` fails halfway through - some resources were created, others weren't. What's your first move, and why is 'just run terraform destroy and start over' usually the wrong instinct?",
-            "Walk me through a CI/CD pipeline you've actually built or maintained, end to end - from a commit landing to that code running in production. What gate would you never remove, even under deadline pressure?",
-            "How would you get a database password or an API token into a running container without ever putting it in a Git repo or a plain Kubernetes Secret? Walk me through what actually retrieves it and when.",
-        ],
         "technical_aptitude": [
            “A pod is stuck in Terminating for over 30 minutes after you run kubectl delete pod. What are the likely causes, how would you safely diagnose it, and what would make you avoid a force delete?”
            → Good answer touches on: finalizers, stuck volume unmounts, why --force --grace-period=0 is risky on stateful workloads (can cause split-brain/data corruption since the old pod process may still be running),
-        ],
-        "continuous_delivery": [
-            "Your team wants to stop developers from accidentally deploying insecure configurations - like mutable `:latest` tags or privileged root containers - straight into production. How would you build that guardrail into the deployment pipeline?",
-            "A developer argues code review alone should be enough to prevent bad configs reaching production. How would you make the case for automated policy enforcement instead?",
-            "How would you roll out a new admission-control policy without breaking existing deployments on day one?",
-            "You've just introduced a Kyverno policy that blocks privileged containers, but several existing workloads violate it. Walk me through how you'd roll this out without breaking them on day one.",
-            "What's the difference between catching a bad Kubernetes config in code review versus blocking it at the cluster level with policy-as-code, and why does that difference matter at scale?",
-            "Kubernetes reports a deployment as fully successful and healthy. Give me a real scenario where that's true and the application is still completely broken for users - and how your rollout process would have caught it.",
-            "Compare rolling updates, blue-green, and canary deployments for a high-risk production change. Which would you actually pick, and what would make you choose differently?",
-            "You're about to ship a change you genuinely consider risky. Walk me through the actual steps you'd take before, during, and after the deploy - not the theory, what you'd literally do.",
-            "After you've made a fix, how do you actually know it worked - not just that the deploy succeeded, but that the original problem is gone? Give me a concrete example of how you validated a fix.",
         ],
         "communication": [
             "Describe a time you had to explain a complex technical issue (like an outage or a security risk) to a non-technical stakeholder. How did you frame it, and how did that shape what happened next?",
