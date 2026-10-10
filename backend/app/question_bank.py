@@ -22,15 +22,8 @@ from typing import Dict, List
 QUESTION_BANK: Dict[str, Dict[str, List[str]]] = {
     "operability-engineer": {
         "breadth_of_knowledge": [
-            "During a deployment rollout, your ingress proxy starts throwing intermittent HTTP 502 and 503 errors, even though pod CPU and memory look healthy. Walk me through how you'd diagnose this, and what's actually happening under the hood.",
-            "Your monitoring shows a spike in 5xx errors right after a rolling update, but only for about 30 seconds each time. What would you check first, and what's your hypothesis for the root cause?",
-            "A teammate says 'just restart the pods' whenever they see 502s during deploys. What would you tell them about why that's treating the symptom, not the cause?",
-            "You get paged for HTTP 502s that only happen during deploys, never at steady state. Walk me through how you'd narrow down whether it's a proxy timeout issue, a readiness probe issue, or something else.",
-            "Explain, in your own words, why a TCP keep-alive mismatch between a proxy and an application can cause intermittent errors that look random but actually have a predictable pattern.",
-            "When you create a Kubernetes Service of type LoadBalancer, walk me through exactly what happens end-to-end - what actually gets created on the cloud side, and how does a real user's request end up at a specific pod?",
-            "Walk me through a single request to api.company.com from the moment DNS resolves it to the moment a pod actually handles it. Name every hop you can think of, including where TLS would terminate.",
-            "A worker node suddenly goes NotReady in production. What actually happens to the pods that were running on it, and what would make that recovery fail or stall?",
-            "What would you actually put on a dashboard for a production service, and why can 'all our infrastructure metrics are green' still be true while customers are experiencing failures?",
+            “Your monitoring shows a spike in 5xx errors right after a rolling update, but only for about 30 seconds each time. What would you check first, and what’s your hypothesis for the root cause?”
+            → Good answer touches on: readiness probes not gating traffic fast enough, old pods being terminated before new ones are ready, proxy/keep-alive timeout mismatches.,
         ],
         "automation": [
             "You need to containerize a Python service for a banking client with a zero-vulnerability, immutable deployment requirement. Walk me through how you'd build and harden that Docker image, and why each step matters.",
@@ -44,16 +37,8 @@ QUESTION_BANK: Dict[str, Dict[str, List[str]]] = {
             "How would you get a database password or an API token into a running container without ever putting it in a Git repo or a plain Kubernetes Secret? Walk me through what actually retrieves it and when.",
         ],
         "technical_aptitude": [
-            "A pod is stuck in `Terminating` for over 30 minutes after you run `kubectl delete pod`. What are the likely causes, how would you safely diagnose it, and what would make you avoid a force delete?",
-            "You notice several pods across your cluster are stuck in `Terminating` after a storage provider outage. Where would you start looking, and what's your safe recovery path?",
-            "Why is `kubectl delete pod --force --grace-period=0` dangerous on a stateful workload, even when the pod looks stuck?",
-            "A stateful pod won't finish terminating and a teammate suggests force-deleting it to 'unblock the deploy.' Walk me through what could go wrong if you do that, and what you'd check first instead.",
-            "Explain what a Kubernetes finalizer is, and how an orphaned finalizer from a crashed operator could leave a pod stuck in Terminating indefinitely.",
-            "Only about 10% of requests are failing with a 5xx, not all of them. Before you touch anything, how would you figure out whether that 10% is hitting the same backend, the same region, or something else entirely?",
-            "Explain where TLS actually terminates in an architecture you've worked with, and then walk me through how you'd rotate that certificate in production without causing a single failed handshake.",
-            "A container image runs perfectly on a developer's laptop and then fails as soon as it's deployed to production. Give me three genuinely different root causes for that, not just 'it's a config issue.'",
-            "Tell me about a real production issue where your first hypothesis turned out to be wrong. What made you initially think that, what evidence changed your mind, and what was actually going on?",
-            "What's the most technically challenging production problem you've personally solved? I want the real architecture, the actual symptoms, what you tried that didn't work, and what finally fixed it.",
+           “A pod is stuck in Terminating for over 30 minutes after you run kubectl delete pod. What are the likely causes, how would you safely diagnose it, and what would make you avoid a force delete?”
+→ Good answer touches on: finalizers, stuck volume unmounts, why --force --grace-period=0 is risky on stateful workloads (can cause split-brain/data corruption since the old pod process may still be running),
         ],
         "continuous_delivery": [
             "Your team wants to stop developers from accidentally deploying insecure configurations - like mutable `:latest` tags or privileged root containers - straight into production. How would you build that guardrail into the deployment pipeline?",
