@@ -12,8 +12,12 @@ listen to the recording directly and form their own judgment of the
 candidate's communication and articulation, using the AI's read as a
 supporting signal only, not a verdict.
 
-Source: provided directly by Vijay (screenshot of an internal
-document), not derived from any external material.
+Source: the underlying 6 categories and intent were provided directly
+by Vijay (screenshot of an internal document); the wording below has
+been deliberately reworded per category (same intent, different
+phrasing) so it doesn't read as identical to the internal consulting-
+round questions - see chat history for the original wording and the
+approved rewrite.
 """
 
 import hashlib
@@ -22,27 +26,27 @@ from typing import Tuple
 CONSULTING_QUESTIONS = [
     {
         "category": "Collaboration",
-        "question": "Tell me a specific time where you had to work in a team where there were conflicting opinions?",
+        "question": "Describe a time your team disagreed on the right approach - how did that play out?",
     },
     {
         "category": "Holistic Thinking",
-        "question": "Tell me about a specific time when you had to understand the big picture in a short amount of time?",
+        "question": "Walk me through a moment you had to quickly get up to speed on a complex situation before acting.",
     },
     {
         "category": "Adaptability",
-        "question": "Can you describe a specific situation where requirements were vague?",
+        "question": "Tell me about a project where you weren't given clear instructions - what did you do?",
     },
     {
         "category": "Influence",
-        "question": "Tell me about a time when you met resistance when trying to introduce an improvement within your team.",
+        "question": "Give an example of a time you pushed for a change and people pushed back - what happened?",
     },
     {
         "category": "Building Relationships",
-        "question": "Tell me about a specific time when you had to work with a disengaged team member?",
+        "question": "Describe working with someone on your team who wasn't fully engaged - how did you handle it?",
     },
     {
         "category": "Continuous Learning",
-        "question": "Give me a specific example of when you needed to work with an unfamiliar technology?",
+        "question": "Tell me about a time you had to pick up a tool or technology you'd never used before.",
     },
 ]
 
